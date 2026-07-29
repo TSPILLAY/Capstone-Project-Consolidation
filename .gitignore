@@ -1,0 +1,23 @@
+# Python byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+test_venv/
+venv/
+ENV/
+env/
+
+# Django local database & static files
+*.sqlite3
+*.log
+local_settings.py
+
+# Environment variables & secrets
+.env
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
