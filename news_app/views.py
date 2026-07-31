@@ -1,5 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.decorators import user_passes_test, login_required
+from django import forms
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
@@ -9,90 +12,136 @@ from .models import Article, CustomUser, Publisher, Newsletter
 from .serializers import ArticleSerializer, UserSerializer, PublisherSerializer, NewsletterSerializer
 
 
-def is_editor(user):
-    """
-    Check if the user is authenticated and holds the 'editor' role.
+# Custom creation form to expose the custom 'role' field
+class CustomUserCreationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = CustomUser
+        fields = UserCreationForm.Meta.fields + ('email', 'role',)
+
+
+# Article & Newsletter Model Forms
+class ArticleForm(forms.ModelForm):
+    class Meta:
+        model = Article
+        fields = ['title', 'content', 'publisher']
+
+
+class NewsletterForm(forms.ModelForm):
+    class Meta:
+        model = Newsletter
+        fields = ['title', 'description', 'articles']
+
+
+# User Authentication & Landing
+def register_view(request):
+    """Render and process user registration with designated role selection."""
+    if request.method == 'POST':
+        form = CustomUserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            
+            # Dynamic redirection based on user role
+            if user.role == 'editor':
+                return redirect('pending_articles')
+            elif user.role == 'journalist':
+                return redirect('create_article')
+            else:  # Reader or default
+                return redirect('article_list')
+    else:
+        form = CustomUserCreationForm()
     
-    Args:
-        user (CustomUser): The user object to evaluate.
-        
-    Returns:
-        bool: True if the user is authenticated and is an editor, False otherwise.
-    """
+    return render(request, 'news_app/register.html', {'form': form})
+
+
+def article_list_view(request):
+    """Public news feed showing all approved articles."""
+    articles = Article.objects.filter(approved=True).order_by('-created_at')
+    return render(request, 'news_app/article_list.html', {'articles': articles})
+
+
+# Role Checks
+def is_editor(user):
     return user.is_authenticated and user.role == 'editor'
 
+def is_journalist(user):
+    return user.is_authenticated and user.role == 'journalist'
 
+def is_journalist_or_editor(user):
+    return user.is_authenticated and user.role in ['journalist', 'editor']
+
+
+# Editor Approval Views
 @user_passes_test(is_editor)
 def pending_articles_list(request):
-    """
-    Render a list of unapproved articles for editor review.
-    
-    Args:
-        request (HttpRequest): The HTTP request object.
-        
-    Returns:
-        HttpResponse: Rendered HTML page containing pending articles.
-    """
+    """Render a list of unapproved articles for editor review."""
     articles = Article.objects.filter(approved=False)
     return render(request, 'news_app/approve_articles.html', {'articles': articles})
 
 
 @user_passes_test(is_editor)
 def approve_article_action(request, article_id):
-    """
-    Approve an article and trigger the article approval signal.
-    
-    Args:
-        request (HttpRequest): The HTTP request object.
-        article_id (int): Primary key of the Article to approve.
-        
-    Returns:
-        HttpResponseRedirect: Redirects to the pending articles list.
-    """
+    """Approve an article and trigger the article approval signal."""
     article = get_object_or_404(Article, id=article_id)
     article.approved = True
     article.save()  # Triggers post_save signal
     return redirect('pending_articles')
 
 
+# Journalist Views
+@user_passes_test(is_journalist)
+def create_article_view(request):
+    """Allow journalists to submit new articles for editor approval."""
+    if request.method == 'POST':
+        form = ArticleForm(request.POST)
+        if form.is_valid():
+            article = form.save(commit=False)
+            article.author = request.user
+            article.approved = False
+            article.save()
+            return redirect('article_list')
+    else:
+        form = ArticleForm()
+    return render(request, 'news_app/create_article.html', {'form': form})
+
+
+# Newsletter Views
+def newsletter_list_view(request):
+    """Allow all readers/users to view curated newsletters."""
+    newsletters = Newsletter.objects.all().order_by('-created_at')
+    return render(request, 'news_app/newsletter_list.html', {'newsletters': newsletters})
+
+
+@user_passes_test(is_journalist_or_editor)
+def create_newsletter_view(request):
+    """Allow journalists and editors to curate newsletters."""
+    if request.method == 'POST':
+        form = NewsletterForm(request.POST)
+        if form.is_valid():
+            newsletter = form.save(commit=False)
+            newsletter.author = request.user
+            newsletter.save()
+            form.save_m2m()
+            return redirect('newsletter_list')
+    else:
+        form = NewsletterForm()
+    return render(request, 'news_app/create_newsletter.html', {'form': form})
+
+
+# DRF API ViewSet & Webhook
 class ArticleViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint for viewing and managing approved articles.
-    """
     serializer_class = ArticleSerializer
 
     def get_queryset(self):
-        """
-        Retrieve approved articles.
-        
-        Returns:
-            QuerySet: Filtered queryset containing only approved articles.
-        """
         return Article.objects.filter(approved=True)
 
     def get_permissions(self):
-        """
-        Determine permissions based on the request action.
-        
-        Returns:
-            list: List of permission instances required for the action.
-        """
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [permissions.IsAuthenticated()]
         return [permissions.AllowAny()]
 
     @action(detail=False, methods=['get'])
     def subscribed(self, request):
-        """
-        Custom API action returning approved articles from publishers and 
-        journalists subscribed to by the authenticated reader.
-        
-        Args:
-            request (Request): REST framework request object.
-            
-        Returns:
-            Response: JSON response containing serialized subscribed articles or error details.
-        """
         if not request.user or not request.user.is_authenticated:
             return Response(
                 {"detail": "Authentication credentials were not provided."}, 
@@ -118,13 +167,4 @@ class ArticleViewSet(viewsets.ModelViewSet):
 
 @api_view(['POST'])
 def api_approved_log(request):
-    """
-    Webhook endpoint receiving article approval notifications from post_save signals.
-    
-    Args:
-        request (Request): REST framework request object containing payload data.
-        
-    Returns:
-        Response: Success confirmation message.
-    """
     return Response({"status": "Article approval logged successfully"}, status=status.HTTP_200_OK)

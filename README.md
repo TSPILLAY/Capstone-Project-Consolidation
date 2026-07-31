@@ -1,24 +1,34 @@
-# News Management System
+# News Project (Django Capstone Application)
 
-A web application and REST API built with **Django** and **MariaDB** for publishing, reviewing, and subscribing to news articles. The system includes role-based access control for **Editors** (article approval) and **Readers** (subscribed publisher feeds).
+A comprehensive Django-based news application featuring user authentication, custom role management (Readers, Journalists, Editors), article submission and review workflows, curated newsletters, and Django REST Framework API endpoints.
 
 ---
 
-## Prerequisites
+## Features & Documentation
 
-Before setting up the project, make sure you have the following installed on your computer:
-* **Python** (version 3.10 or higher)
+* **Role-Based Workflows**: Custom user permissions separating Readers, Journalists, and Editors.
+* **REST API**: Powered by Django REST Framework to expose articles, newsletters, and publisher resources.
+* **Sphinx Documentation**: Complete HTML code documentation auto-generated from project docstrings.
+
+### Viewing Sphinx Documentation
+1. Navigate to `docs/build/html/index.html` (or `docs/_build/html/index.html`).
+2. Double-click or open `index.html` directly in any web browser to view the interactive documentation site.
+
+---
+
+## Local Setup & Installation (Virtual Environment)
+
+Follow these step-by-step instructions to get the development environment running locally:
+
+### 1. Prerequisites
+Ensure you have the following installed on your system:
+* **Python**: 3.10 or higher
 * **Git**
-* **MariaDB Server** (or MySQL)
+* **Database**: SQLite (default for development) or MariaDB / MySQL
 
----
-
-## Step-by-Step Setup Guide
-
-Follow these instructions to run the project locally on your machine.
-
-### Step 1: Clone the Project
-Open your terminal (Git Bash on Windows or Terminal on macOS/Linux) and clone the repository to your local computer:
+### 2. Clone the Repository
+Clone the repository from GitHub and navigate into the project root directory:
 
 ```bash
-git clone [https://github.com/YOUR_GITHUB_USERNAME/news_project.git](https://github.com/YOUR_GITHUB_USERNAME/news_project.git)
+git clone [https://github.com/TSPILLAY/Capstone-Project-Consolidation.git](https://github.com/TSPILLAY/Capstone-Project-Consolidation.git)
+cd news_project
